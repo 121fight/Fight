@@ -94,10 +94,7 @@
             <button id="btn-leave-room" class="cancel-btn small danger-text">Leave</button>
         </div>
 
-        <!-- 8 SEATS -->
-        <div class="seat-container" id="seat-grid">
-            <!-- Rendered via JS -->
-        </div>
+        <div class="seat-container" id="seat-grid"></div>
 
         <div class="audience-section">
             <h4>Audience</h4>
@@ -114,14 +111,28 @@
         </div>
     </div>
 
-    <!-- DYNAMIC SEAT ACTION MODAL (HOST CONTROLS & REPORT) -->
+    <!-- DYNAMIC SEAT ACTION MODAL -->
     <div id="modal-seat-action" class="modal hidden">
         <div class="card">
             <h3 id="action-target-name">Seat Action</h3>
-            <div id="action-buttons-container" style="display:flex; flex-direction:column; gap:10px; width:100%;">
-                <!-- Buttons injected by JS depending on Admin/User status -->
-            </div>
+            <div id="action-buttons-container" style="display:flex; flex-direction:column; gap:10px; width:100%;"></div>
             <button class="cancel-btn close-modal" style="margin-top:10px;">Cancel</button>
+        </div>
+    </div>
+
+    <!-- REPORT MODAL (NEW) -->
+    <div id="modal-report" class="modal hidden">
+        <div class="card">
+            <h3 style="color: var(--danger)">Report User</h3>
+            <p id="report-target-info" style="text-align:center; font-size:14px; color:var(--muted);"></p>
+            <select id="report-reason">
+                <option value="Abuse & Bad Words">Abuse & Bad Words</option>
+                <option value="Spamming">Spamming</option>
+                <option value="Mic Misuse (Echo/Noise)">Mic Misuse (Echo/Noise)</option>
+                <option value="Other">Other</option>
+            </select>
+            <button id="btn-submit-report" class="primary-btn danger-btn">Copy & Open Telegram</button>
+            <button class="cancel-btn close-modal">Cancel</button>
         </div>
     </div>
 
