@@ -1,13 +1,12 @@
 const app = {
     user: {},
-    currentRoom: null,
-    
+    selectedSeatIndex: null,
+
     init() {
         this.preventBackButton();
         this.bindEvents();
         this.loadProfile();
         
-        // Flow control
         if (!localStorage.getItem('termsAccepted')) {
             this.showScreen('screen-terms');
         } else if (!this.user.username) {
@@ -17,25 +16,18 @@ const app = {
         }
     },
 
-    // PREVENT BROWSER BACK BUTTON
     preventBackButton() {
         history.pushState(null, null, location.href);
-        window.onpopstate = function () {
-            history.go(1); // Force state forward
-            // Optionally alert user
-            // alert("Please use the 'Leave' or 'Exit' buttons inside the app.");
-        };
+        window.onpopstate = () => { history.go(1); };
     },
 
     showScreen(id) {
         document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
         document.getElementById(id).classList.remove('hidden');
-        window.scrollTo(0, 0); // Reset scroll
     },
 
     bindEvents() {
-        // Terms
-        document.getElementById('terms-checkbox').addEventListener('change', (e) => {
+        document.getElementById('terms-checkbox').addEventListener('change', e => {
             document.getElementById('btn-accept-terms').disabled = !e.target.checked;
         });
         document.getElementById('btn-accept-terms').addEventListener('click', () => {
@@ -43,11 +35,9 @@ const app = {
             this.showScreen('screen-profile');
         });
 
-        // Profile
         document.getElementById('avatar-input').addEventListener('change', this.handleAvatarUpload.bind(this));
         document.getElementById('btn-save-profile').addEventListener('click', this.saveProfile.bind(this));
 
-        // Home Modals
         const closeModals = () => document.querySelectorAll('.modal').forEach(m => m.classList.add('hidden'));
         document.querySelectorAll('.close-modal').forEach(b => b.addEventListener('click', closeModals));
         
@@ -57,11 +47,7 @@ const app = {
         document.getElementById('btn-show-join').addEventListener('click', () => {
             document.getElementById('modal-join').classList.remove('hidden');
         });
-        document.getElementById('btn-info').addEventListener('click', () => {
-            this.showScreen('screen-terms');
-        });
 
-        // Create / Join Logic
         document.getElementById('btn-create-room').addEventListener('click', () => {
             const name = document.getElementById('create-room-name').value;
             if(!name) return alert("Enter room name");
@@ -76,39 +62,19 @@ const app = {
             webrtc.joinRoom(code);
         });
 
-        // Room Logic (LEAVE BUTTON)
         document.getElementById('btn-leave-room').addEventListener('click', () => {
-            const confirmLeave = confirm("Are you sure you want to leave the room?");
-            if(confirmLeave) {
+            if(confirm("Are you sure you want to leave?")) {
                 webrtc.leaveRoom();
                 this.showScreen('screen-home');
             }
         });
 
         document.getElementById('btn-send-chat').addEventListener('click', this.sendChat.bind(this));
-        document.getElementById('btn-toggle-mic').addEventListener('click', webrtc.toggleMic.bind(webrtc));
-
-        // Report Logic (SENDS TO TELEGRAM)
-        document.getElementById('btn-submit-report').addEventListener('click', () => {
-            const targetUser = document.getElementById('report-user-name').textContent;
-            const reason = document.getElementById('report-reason').value;
-            
-            // Format message for Telegram bot
-            const message = `🚨 *New Report* 🚨%0A%0A*Target User:* ${targetUser}%0A*Reporter ID:* ${this.user.deviceId}%0A*Reason:* ${reason}`;
-            const telegramUrl = `https://t.me/Nightworrormic_bot?start=${encodeURIComponent('report')}`;
-            
-            // Open Telegram
-            window.open(telegramUrl, '_blank');
-            document.getElementById('modal-report').classList.add('hidden');
-        });
+        document.getElementById('btn-toggle-mic').addEventListener('click', () => webrtc.toggleMic());
     },
 
     exitApp() {
-        if(confirm("Exit Application?")) {
-            // Because scripts can't close tabs they didn't open in Chrome, 
-            // we redirect to a blank page or google.
-            window.location.replace("about:blank");
-        }
+        if(confirm("Exit Application?")) window.location.replace("about:blank");
     },
 
     handleAvatarUpload(e) {
@@ -126,13 +92,9 @@ const app = {
     saveProfile() {
         const username = document.getElementById('username-input').value;
         const gender = document.getElementById('gender-input').value;
-        const language = document.getElementById('language-input').value;
-
-        if(!username || !gender || !language) return alert("Please fill all fields");
+        if(!username || !gender) return alert("Fill all fields");
 
         this.user.username = username;
-        this.user.gender = gender;
-        this.user.language = language;
         this.user.deviceId = localStorage.getItem('deviceId');
         if(!this.user.avatar) this.user.avatar = document.getElementById('avatar-preview').src;
 
@@ -146,43 +108,141 @@ const app = {
             this.user = JSON.parse(saved);
             document.getElementById('avatar-preview').src = this.user.avatar;
             document.getElementById('username-input').value = this.user.username;
-            document.getElementById('gender-input').value = this.user.gender;
-            document.getElementById('language-input').value = this.user.language;
         }
     },
 
+    // UI RENDER
     updateRoomUI(roomData) {
         document.getElementById('display-room-name').textContent = roomData.name;
         document.getElementById('display-room-code').textContent = "Code: " + roomData.code;
         
-        // Reset Seats
-        for(let i=1; i<=8; i++) {
-            const seat = document.getElementById(`seat-${i}`);
-            seat.querySelector('span').textContent = i===1 ? "Admin" : "Empty";
-            seat.querySelector('.avatar-circle').style.backgroundImage = 'none';
-            seat.onclick = null;
+        const grid = document.getElementById('seat-grid');
+        grid.innerHTML = "";
+
+        // 8 Seats Loop
+        for(let i=0; i<8; i++) {
+            const occupant = roomData.seats[i];
+            const isLocked = roomData.lockedSeats[i];
+            
+            const div = document.createElement('div');
+            div.className = `seat ${i===0 ? 'admin-seat' : ''}`;
+            div.onclick = () => this.handleSeatClick(i, occupant, isLocked);
+
+            let bg = 'none';
+            let name = "Empty";
+            let lockHtml = isLocked ? `<div class="lock-icon">🔒</div>` : '';
+
+            if(occupant) {
+                bg = `url(${occupant.avatar})`;
+                name = occupant.username;
+                if(i===0) name = "👑 " + name; // Admin crown
+                lockHtml = ''; // Hide lock if someone is sitting
+            }
+
+            div.innerHTML = `
+                <div class="avatar-circle" style="background-image: ${bg}">${occupant ? '' : '+'}</div>
+                <span>${name}</span>
+                ${lockHtml}
+            `;
+            grid.appendChild(div);
         }
 
-        // Render Speakers
-        roomData.speakers.forEach((spk, index) => {
-            if(index < 8) {
-                const seat = document.getElementById(`seat-${index+1}`);
-                seat.querySelector('span').textContent = spk.username;
-                seat.querySelector('.avatar-circle').style.backgroundImage = `url(${spk.avatar})`;
-                seat.onclick = () => this.openReport(spk.username);
-            }
-        });
-
-        // Render Audience
+        // Audience Loop
         const audList = document.getElementById('audience-list');
         audList.innerHTML = "";
         roomData.audience.forEach(aud => {
             const div = document.createElement('div');
             div.className = "audience-item";
             div.innerHTML = `<img src="${aud.avatar}"><span>${aud.username}</span>`;
-            div.onclick = () => this.openReport(aud.username);
+            div.onclick = () => this.handleAudienceClick(aud);
             audList.appendChild(div);
         });
+    },
+
+    // DYNAMIC SEAT CLICKS
+    handleSeatClick(index, occupant, isLocked) {
+        this.selectedSeatIndex = index;
+        const modal = document.getElementById('modal-seat-action');
+        const title = document.getElementById('action-target-name');
+        const container = document.getElementById('action-buttons-container');
+        container.innerHTML = ""; // clear old buttons
+
+        const isMeHost = webrtc.isHost;
+        const myId = this.user.deviceId;
+
+        if (occupant) {
+            title.textContent = occupant.username;
+            
+            if (occupant.deviceId === myId) {
+                // It's me
+                if (index !== 0) {
+                    container.appendChild(this.createBtn("Leave Seat", "warning-btn", () => webrtc.leaveSeat(index)));
+                } else {
+                    title.textContent += " (You are Host)";
+                }
+            } else {
+                // Someone else
+                if (isMeHost) {
+                    container.appendChild(this.createBtn("Mute User", "warning-btn", () => webrtc.hostCommand('mute', occupant.deviceId)));
+                    container.appendChild(this.createBtn("Kick to Audience", "danger-btn", () => webrtc.hostCommand('kick_seat', occupant.deviceId, index)));
+                    container.appendChild(this.createBtn("Remove from Room", "danger-btn", () => webrtc.hostCommand('kick_room', occupant.deviceId)));
+                } else {
+                    container.appendChild(this.createBtn("Report User", "danger-btn", () => this.sendTelegramReport(occupant.username, "Abuse/Spam")));
+                }
+            }
+        } else {
+            title.textContent = `Seat ${index + 1}`;
+            
+            if (isMeHost && index !== 0) {
+                if(isLocked) {
+                    container.appendChild(this.createBtn("Unlock Seat", "primary-btn", () => webrtc.hostCommand('unlock_seat', null, index)));
+                } else {
+                    container.appendChild(this.createBtn("Lock Seat", "danger-btn", () => webrtc.hostCommand('lock_seat', null, index)));
+                }
+            }
+
+            if (!occupant && !isLocked && !webrtc.amIOnSeat()) {
+                container.appendChild(this.createBtn("Take Seat", "primary-btn", () => webrtc.requestSeat(index)));
+            } else if (isLocked && !isMeHost) {
+                title.textContent = "Seat is Locked by Admin";
+            }
+        }
+
+        if(container.innerHTML !== "") {
+            modal.classList.remove('hidden');
+        }
+    },
+
+    handleAudienceClick(user) {
+        if(user.deviceId === this.user.deviceId) return;
+        const modal = document.getElementById('modal-seat-action');
+        const title = document.getElementById('action-target-name');
+        const container = document.getElementById('action-buttons-container');
+        container.innerHTML = "";
+
+        title.textContent = user.username;
+        if(webrtc.isHost) {
+            container.appendChild(this.createBtn("Remove from Room", "danger-btn", () => webrtc.hostCommand('kick_room', user.deviceId)));
+        } else {
+            container.appendChild(this.createBtn("Report User", "danger-btn", () => this.sendTelegramReport(user.username, "Abuse")));
+        }
+        modal.classList.remove('hidden');
+    },
+
+    createBtn(text, className, onClick) {
+        const btn = document.createElement('button');
+        btn.textContent = text;
+        btn.className = className;
+        btn.onclick = () => {
+            onClick();
+            document.getElementById('modal-seat-action').classList.add('hidden');
+        };
+        return btn;
+    },
+
+    sendTelegramReport(targetUser, reason) {
+        const message = `🚨 *New Report* 🚨%0A%0A*Target User:* ${targetUser}%0A*Reporter ID:* ${this.user.deviceId}%0A*Reason:* ${reason}`;
+        window.open(`https://t.me/Nightworrormic_bot?start=${encodeURIComponent('report')}`, '_blank');
     },
 
     appendChat(username, text) {
@@ -202,14 +262,7 @@ const app = {
             this.appendChat(this.user.username, text);
             input.value = "";
         }
-    },
-
-    openReport(username) {
-        if(username === this.user.username) return; // Can't report yourself
-        document.getElementById('report-user-name').textContent = username;
-        document.getElementById('modal-report').classList.remove('hidden');
     }
 };
 
-// Wait for config before starting
 document.addEventListener('ConfigLoaded', () => app.init());
