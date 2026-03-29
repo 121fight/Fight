@@ -5,12 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Voice Chatroom</title>
     <link rel="stylesheet" href="style.css">
-    <!-- PeerJS for WebRTC without backend -->
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 </head>
 <body>
 
-    <!-- OVERLAYS (Updates / Bans) -->
+    <!-- OVERLAYS -->
     <div id="system-overlay" class="hidden">
         <div class="overlay-card">
             <h2 id="overlay-title">Notice</h2>
@@ -19,12 +18,12 @@
         </div>
     </div>
 
-    <!-- SCREEN 1: TERMS & CONDITIONS -->
+    <!-- SCREENS -->
     <div id="screen-terms" class="screen hidden">
         <div class="card terms-card">
             <h2>Terms & Conditions</h2>
             <div class="scroll-box">
-                This application is created only for entertainment purposes. By using this app, you agree that any actions performed within the app are your own responsibility. The developer is not responsible for misuse, damages, or any issues caused by users.
+                This application is created only for entertainment purposes. By using this app, you agree that any actions performed within the app are your own responsibility.
             </div>
             <label class="checkbox-container">
                 <input type="checkbox" id="terms-checkbox">
@@ -34,7 +33,6 @@
         </div>
     </div>
 
-    <!-- SCREEN 2: PROFILE SETUP -->
     <div id="screen-profile" class="screen hidden">
         <div class="card">
             <h2>Profile Setup</h2>
@@ -52,32 +50,22 @@
                 <option value="" disabled selected>Select Gender</option>
                 <option value="Male">Male</option>
                 <option value="Female">Female</option>
-                <option value="Other">Other</option>
-            </select>
-            <select id="language-input">
-                <option value="English">English</option>
-                <option value="Hindi">Hindi</option>
-                <option value="Spanish">Spanish</option>
             </select>
             <button id="btn-save-profile" class="primary-btn">Continue</button>
         </div>
     </div>
 
-    <!-- SCREEN 3: HOME -->
     <div id="screen-home" class="screen hidden">
-        <div class="header">
-            <h2>Voice Chatroom</h2>
-        </div>
+        <div class="header"><h2>Voice Chatroom</h2></div>
         <div class="home-menu">
             <button id="btn-show-create" class="menu-btn">Create Room</button>
             <button id="btn-show-join" class="menu-btn">Join Room</button>
             <button class="menu-btn" onclick="app.showScreen('screen-profile')">Profile</button>
             <button class="menu-btn danger-btn" onclick="app.exitApp()">Exit App</button>
         </div>
-        <button id="btn-info" class="icon-btn bottom-left">i</button>
     </div>
 
-    <!-- MODALS FOR CREATE / JOIN -->
+    <!-- MODALS CREATE/JOIN -->
     <div id="modal-create" class="modal hidden">
         <div class="card">
             <h3>Create Room</h3>
@@ -96,7 +84,7 @@
         </div>
     </div>
 
-    <!-- SCREEN 4/5: VOICE ROOM -->
+    <!-- VOICE ROOM -->
     <div id="screen-room" class="screen hidden">
         <div class="room-header">
             <div>
@@ -106,25 +94,16 @@
             <button id="btn-leave-room" class="cancel-btn small danger-text">Leave</button>
         </div>
 
-        <!-- SEAT LAYOUT (4x2 Grid) -->
-        <div class="seat-container">
-            <div class="seat admin-seat" id="seat-1"><div class="avatar-circle"></div><span>Admin</span></div>
-            <div class="seat" id="seat-2"><div class="avatar-circle"></div><span>Empty</span></div>
-            <div class="seat" id="seat-3"><div class="avatar-circle"></div><span>Empty</span></div>
-            <div class="seat" id="seat-4"><div class="avatar-circle"></div><span>Empty</span></div>
-            <div class="seat" id="seat-5"><div class="avatar-circle"></div><span>Empty</span></div>
-            <div class="seat" id="seat-6"><div class="avatar-circle"></div><span>Empty</span></div>
-            <div class="seat" id="seat-7"><div class="avatar-circle"></div><span>Empty</span></div>
-            <div class="seat" id="seat-8"><div class="avatar-circle"></div><span>Empty</span></div>
+        <!-- 8 SEATS -->
+        <div class="seat-container" id="seat-grid">
+            <!-- Rendered via JS -->
         </div>
 
-        <!-- AUDIENCE -->
         <div class="audience-section">
             <h4>Audience</h4>
             <div id="audience-list" class="audience-list"></div>
         </div>
 
-        <!-- BOTTOM CONTROLS & CHAT -->
         <div class="room-chat">
             <div id="chat-messages" class="chat-messages"></div>
             <div class="chat-input-area">
@@ -135,26 +114,19 @@
         </div>
     </div>
 
-    <!-- REPORT MODAL -->
-    <div id="modal-report" class="modal hidden">
+    <!-- DYNAMIC SEAT ACTION MODAL (HOST CONTROLS & REPORT) -->
+    <div id="modal-seat-action" class="modal hidden">
         <div class="card">
-            <h3 style="color: var(--danger)">Report User</h3>
-            <p id="report-user-name" style="text-align:center; font-size:14px; color:var(--muted);"></p>
-            <select id="report-reason">
-                <option value="Abuse">Abuse</option>
-                <option value="Spam">Spam</option>
-                <option value="Mic misuse">Mic misuse</option>
-                <option value="Other">Other</option>
-            </select>
-            <button id="btn-submit-report" class="primary-btn" style="background:var(--danger)">Submit to Telegram</button>
-            <button class="cancel-btn close-modal">Cancel</button>
+            <h3 id="action-target-name">Seat Action</h3>
+            <div id="action-buttons-container" style="display:flex; flex-direction:column; gap:10px; width:100%;">
+                <!-- Buttons injected by JS depending on Admin/User status -->
+            </div>
+            <button class="cancel-btn close-modal" style="margin-top:10px;">Cancel</button>
         </div>
     </div>
 
-    <!-- AUDIO CONTAINER -->
     <div id="audio-container"></div>
 
-    <!-- SCRIPTS -->
     <script src="config.js"></script>
     <script src="webrtc.js"></script>
     <script src="app.js"></script>
