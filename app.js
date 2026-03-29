@@ -1,6 +1,7 @@
 const app = {
     user: {},
     selectedSeatIndex: null,
+    reportTarget: { username: "", deviceId: "" },
 
     init() {
         this.preventBackButton();
@@ -71,6 +72,24 @@ const app = {
 
         document.getElementById('btn-send-chat').addEventListener('click', this.sendChat.bind(this));
         document.getElementById('btn-toggle-mic').addEventListener('click', () => webrtc.toggleMic());
+
+        // --- NEW REPORT SUBMISSION LOGIC ---
+        document.getElementById('btn-submit-report').addEventListener('click', () => {
+            const reason = document.getElementById('report-reason').value;
+            
+            // Format for Telegram
+            const reportText = `🚨 *NEW REPORT* 🚨\n\n👤 *Offender Name:* ${this.reportTarget.username}\n🆔 *Offender Device ID:* ${this.reportTarget.deviceId}\n\n📝 *Reason:* ${reason}\n🛡️ *Reporter ID:* ${this.user.deviceId}`;
+            
+            // Copy to clipboard
+            navigator.clipboard.writeText(reportText).then(() => {
+                alert("Report details COPIED! \n\nPlease PASTE it in the Telegram Bot.");
+                window.open(`https://t.me/Nightworrormic_bot`, '_blank');
+                document.getElementById('modal-report').classList.add('hidden');
+            }).catch(err => {
+                // Fallback if clipboard fails
+                window.open(`https://t.me/Nightworrormic_bot?text=${encodeURIComponent(reportText)}`, '_blank');
+            });
+        });
     },
 
     exitApp() {
@@ -111,7 +130,6 @@ const app = {
         }
     },
 
-    // UI RENDER
     updateRoomUI(roomData) {
         document.getElementById('display-room-name').textContent = roomData.name;
         document.getElementById('display-room-code').textContent = "Code: " + roomData.code;
@@ -119,7 +137,6 @@ const app = {
         const grid = document.getElementById('seat-grid');
         grid.innerHTML = "";
 
-        // 8 Seats Loop
         for(let i=0; i<8; i++) {
             const occupant = roomData.seats[i];
             const isLocked = roomData.lockedSeats[i];
@@ -135,8 +152,8 @@ const app = {
             if(occupant) {
                 bg = `url(${occupant.avatar})`;
                 name = occupant.username;
-                if(i===0) name = "👑 " + name; // Admin crown
-                lockHtml = ''; // Hide lock if someone is sitting
+                if(i===0) name = "👑 " + name;
+                lockHtml = ''; 
             }
 
             div.innerHTML = `
@@ -147,7 +164,6 @@ const app = {
             grid.appendChild(div);
         }
 
-        // Audience Loop
         const audList = document.getElementById('audience-list');
         audList.innerHTML = "";
         roomData.audience.forEach(aud => {
@@ -159,13 +175,12 @@ const app = {
         });
     },
 
-    // DYNAMIC SEAT CLICKS
     handleSeatClick(index, occupant, isLocked) {
         this.selectedSeatIndex = index;
         const modal = document.getElementById('modal-seat-action');
         const title = document.getElementById('action-target-name');
         const container = document.getElementById('action-buttons-container');
-        container.innerHTML = ""; // clear old buttons
+        container.innerHTML = ""; 
 
         const isMeHost = webrtc.isHost;
         const myId = this.user.deviceId;
@@ -174,33 +189,27 @@ const app = {
             title.textContent = occupant.username;
             
             if (occupant.deviceId === myId) {
-                // It's me
                 if (index !== 0) {
                     container.appendChild(this.createBtn("Leave Seat", "warning-btn", () => webrtc.leaveSeat(index)));
                 } else {
                     title.textContent += " (You are Host)";
                 }
             } else {
-                // Someone else
                 if (isMeHost) {
                     container.appendChild(this.createBtn("Mute User", "warning-btn", () => webrtc.hostCommand('mute', occupant.deviceId)));
                     container.appendChild(this.createBtn("Kick to Audience", "danger-btn", () => webrtc.hostCommand('kick_seat', occupant.deviceId, index)));
                     container.appendChild(this.createBtn("Remove from Room", "danger-btn", () => webrtc.hostCommand('kick_room', occupant.deviceId)));
                 } else {
-                    container.appendChild(this.createBtn("Report User", "danger-btn", () => this.sendTelegramReport(occupant.username, "Abuse/Spam")));
+                    // Send to Report Screen
+                    container.appendChild(this.createBtn("Report User", "danger-btn", () => this.openReportModal(occupant.username, occupant.deviceId)));
                 }
             }
         } else {
             title.textContent = `Seat ${index + 1}`;
-            
             if (isMeHost && index !== 0) {
-                if(isLocked) {
-                    container.appendChild(this.createBtn("Unlock Seat", "primary-btn", () => webrtc.hostCommand('unlock_seat', null, index)));
-                } else {
-                    container.appendChild(this.createBtn("Lock Seat", "danger-btn", () => webrtc.hostCommand('lock_seat', null, index)));
-                }
+                if(isLocked) container.appendChild(this.createBtn("Unlock Seat", "primary-btn", () => webrtc.hostCommand('unlock_seat', null, index)));
+                else container.appendChild(this.createBtn("Lock Seat", "danger-btn", () => webrtc.hostCommand('lock_seat', null, index)));
             }
-
             if (!occupant && !isLocked && !webrtc.amIOnSeat()) {
                 container.appendChild(this.createBtn("Take Seat", "primary-btn", () => webrtc.requestSeat(index)));
             } else if (isLocked && !isMeHost) {
@@ -208,9 +217,7 @@ const app = {
             }
         }
 
-        if(container.innerHTML !== "") {
-            modal.classList.remove('hidden');
-        }
+        if(container.innerHTML !== "") modal.classList.remove('hidden');
     },
 
     handleAudienceClick(user) {
@@ -224,7 +231,7 @@ const app = {
         if(webrtc.isHost) {
             container.appendChild(this.createBtn("Remove from Room", "danger-btn", () => webrtc.hostCommand('kick_room', user.deviceId)));
         } else {
-            container.appendChild(this.createBtn("Report User", "danger-btn", () => this.sendTelegramReport(user.username, "Abuse")));
+            container.appendChild(this.createBtn("Report User", "danger-btn", () => this.openReportModal(user.username, user.deviceId)));
         }
         modal.classList.remove('hidden');
     },
@@ -240,9 +247,13 @@ const app = {
         return btn;
     },
 
-    sendTelegramReport(targetUser, reason) {
-        const message = `🚨 *New Report* 🚨%0A%0A*Target User:* ${targetUser}%0A*Reporter ID:* ${this.user.deviceId}%0A*Reason:* ${reason}`;
-        window.open(`https://t.me/Nightworrormic_bot?start=${encodeURIComponent('report')}`, '_blank');
+    // OPEN REPORT MODAL & SET TARGET DATA
+    openReportModal(username, deviceId) {
+        this.reportTarget.username = username;
+        this.reportTarget.deviceId = deviceId;
+        
+        document.getElementById('report-target-info').textContent = `Target: ${username}`;
+        document.getElementById('modal-report').classList.remove('hidden');
     },
 
     appendChat(username, text) {
