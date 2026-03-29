@@ -1,6 +1,6 @@
 const webrtc = {
     peer: null,
-    connections: [], // array of PeerJS DataConnections
+    connections: [], 
     roomData: { 
         name: "", 
         code: "", 
@@ -13,13 +13,31 @@ const webrtc = {
 
     async initPeer(id) {
         return new Promise((resolve, reject) => {
-            this.peer = new Peer(id);
+            // Added Google STUN servers for fast & reliable connection
+            const options = {
+                config: {
+                    'iceServers': [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ]
+                }
+            };
+            
+            this.peer = id ? new Peer(id, options) : new Peer(options);
+            
             this.peer.on('open', resolve);
-            this.peer.on('error', reject);
+            this.peer.on('error', (err) => {
+                console.error("PeerJS Error:", err);
+                reject(err);
+            });
         });
     },
 
     async createRoom(name) {
+        const btn = document.getElementById('btn-create-room');
+        btn.textContent = "Creating...";
+        btn.disabled = true;
+
         const code = Math.floor(1000 + Math.random() * 9000).toString();
         this.isHost = true;
         this.roomData.name = name;
@@ -28,21 +46,46 @@ const webrtc = {
 
         try {
             await this.initPeer('vc-room-' + code);
+            document.querySelectorAll('.modal').forEach(m => m.classList.add('hidden'));
+            btn.textContent = "Create";
+            btn.disabled = false;
+            
             app.showScreen('screen-room');
             app.updateRoomUI(this.roomData);
             this.listenForPeers();
             await this.enableMic();
         } catch (e) {
-            alert("Error creating room. Code in use.");
+            btn.textContent = "Create";
+            btn.disabled = false;
+            alert("Error creating room. Code might be in use, try again.");
         }
     },
 
     async joinRoom(code) {
         this.isHost = false;
+        const btn = document.getElementById('btn-join-room');
+        btn.textContent = "Joining...";
+        btn.disabled = true;
+
         try {
-            await this.initPeer();
-            const conn = this.peer.connect('vc-room-' + code);
+            await this.initPeer(); // Guest gets random ID
+            const conn = this.peer.connect('vc-room-' + code, { reliable: true });
+
+            // 7 seconds Timeout agar Host offline ho
+            const joinTimeout = setTimeout(() => {
+                btn.textContent = "Join";
+                btn.disabled = false;
+                alert("Room not found or Host is offline!");
+            }, 7000);
+
             conn.on('open', () => {
+                clearTimeout(joinTimeout); // Connection successful, stop timeout
+                btn.textContent = "Join";
+                btn.disabled = false;
+                document.querySelectorAll('.modal').forEach(m => m.classList.add('hidden'));
+                
+                app.showScreen('screen-room'); // Show room instantly
+                
                 conn.send({ type: 'join', user: app.user });
                 this.connections.push(conn);
                 
@@ -63,7 +106,11 @@ const webrtc = {
                 });
             });
 
-        } catch(e) { alert("Room not found!"); }
+        } catch(e) {
+            btn.textContent = "Join";
+            btn.disabled = false;
+            alert("Connection Error. Please try again.");
+        }
     },
 
     // Host handles incoming connections
@@ -74,7 +121,7 @@ const webrtc = {
                 if(data.type === 'join') {
                     this.roomData.audience.push(data.user);
                     conn.userDevice = data.user.deviceId; // Track for kicking
-                    this.broadcastState();
+                    this.broadcastState(); // Update everyone
                     if(this.myStream) this.peer.call(conn.peer, this.myStream);
                 }
                 if(data.type === 'chat') {
@@ -82,9 +129,7 @@ const webrtc = {
                     app.appendChat(data.username, data.text);
                 }
                 if(data.type === 'req_seat') {
-                    // Guest asking for a seat
                     if(!this.roomData.seats[data.index] && !this.roomData.lockedSeats[data.index]) {
-                        // Remove from audience
                         this.roomData.audience = this.roomData.audience.filter(u => u.deviceId !== data.user.deviceId);
                         this.roomData.seats[data.index] = data.user;
                         this.broadcastState();
@@ -133,7 +178,6 @@ const webrtc = {
         }
     },
 
-    // --- ADMIN CONTROLS ---
     hostCommand(cmd, targetDeviceId, seatIndex = null) {
         if(!this.isHost) return;
 
@@ -189,10 +233,8 @@ const webrtc = {
         }
     },
 
-    // --- AUDIO & MIC ---
     async enableMic() {
         try {
-            // ADVANCED AUDIO CONSTRAINTS for external mic & clear voice
             this.myStream = await navigator.mediaDevices.getUserMedia({ 
                 audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } 
             });
@@ -202,7 +244,6 @@ const webrtc = {
             if(this.isHost) {
                 this.connections.forEach(c => this.peer.call(c.peer, this.myStream)); 
             } else if (this.connections.length > 0) {
-                // Send stream to host
                 this.peer.call(this.connections[0].peer, this.myStream);
             }
         } catch (e) { alert("Mic access denied or unavailable."); }
@@ -232,13 +273,11 @@ const webrtc = {
     },
 
     playStream(stream) {
-        // Autoplay bypass for mobile browsers
         const audio = document.createElement('audio');
         audio.srcObject = stream;
         audio.autoplay = true;
-        audio.playsInline = true; // Crucial for iOS/Android
+        audio.playsInline = true; 
         
-        // Force play via user interaction event if paused
         const playPromise = audio.play();
         if(playPromise !== undefined) {
             playPromise.catch(error => {
