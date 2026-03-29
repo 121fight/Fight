@@ -13,7 +13,6 @@ const webrtc = {
 
     async initPeer(id) {
         return new Promise((resolve, reject) => {
-            // Added Google STUN servers for fast & reliable connection
             const options = {
                 config: {
                     'iceServers': [
@@ -25,10 +24,15 @@ const webrtc = {
             
             this.peer = id ? new Peer(id, options) : new Peer(options);
             
+            // Jab server se connect ho jaye
             this.peer.on('open', resolve);
+            
+            // Error handling
             this.peer.on('error', (err) => {
-                console.error("PeerJS Error:", err);
-                reject(err);
+                console.warn("PeerJS Warning/Error:", err.type);
+                if (err.type === 'unavailable-id') {
+                    reject(err);
+                }
             });
         });
     },
@@ -42,10 +46,13 @@ const webrtc = {
         this.isHost = true;
         this.roomData.name = name;
         this.roomData.code = code;
-        this.roomData.seats[0] = app.user; // Host takes seat 0
+        this.roomData.seats[0] = app.user; // Host Seat 1
+        this.roomData.audience = [];
 
         try {
+            if (this.peer) this.peer.destroy(); // Reset old connections
             await this.initPeer('vc-room-' + code);
+            
             document.querySelectorAll('.modal').forEach(m => m.classList.add('hidden'));
             btn.textContent = "Create";
             btn.disabled = false;
@@ -57,7 +64,7 @@ const webrtc = {
         } catch (e) {
             btn.textContent = "Create";
             btn.disabled = false;
-            alert("Error creating room. Code might be in use, try again.");
+            alert("Error: Room Code is already in use. Try creating again.");
         }
     },
 
@@ -68,27 +75,45 @@ const webrtc = {
         btn.disabled = true;
 
         try {
-            await this.initPeer(); // Guest gets random ID
-            const conn = this.peer.connect('vc-room-' + code, { reliable: true });
+            if (this.peer) this.peer.destroy(); // Clear any previous instance
+            await this.initPeer(); 
 
-            // 7 seconds Timeout agar Host offline ho
+            const targetRoomId = 'vc-room-' + code;
+            
+            // 10 second timeout for weak networks
             const joinTimeout = setTimeout(() => {
                 btn.textContent = "Join";
                 btn.disabled = false;
-                alert("Room not found or Host is offline!");
-            }, 7000);
+                alert("Connection Timeout! Host might be offline or network is slow.");
+                if(this.peer) this.peer.destroy();
+            }, 10000);
+
+            // Host Unavailable error specifically
+            this.peer.on('error', (err) => {
+                if (err.type === 'peer-unavailable') {
+                    clearTimeout(joinTimeout);
+                    btn.textContent = "Join";
+                    btn.disabled = false;
+                    alert("Room Not Found! Check the code or Host is offline.");
+                }
+            });
+
+            // Connect to Host
+            const conn = this.peer.connect(targetRoomId);
 
             conn.on('open', () => {
-                clearTimeout(joinTimeout); // Connection successful, stop timeout
+                clearTimeout(joinTimeout); // Stop timeout timer
                 btn.textContent = "Join";
                 btn.disabled = false;
+                
                 document.querySelectorAll('.modal').forEach(m => m.classList.add('hidden'));
+                app.showScreen('screen-room'); 
                 
-                app.showScreen('screen-room'); // Show room instantly
-                
+                // Tell host I have joined
                 conn.send({ type: 'join', user: app.user });
                 this.connections.push(conn);
                 
+                // Receive Live Updates from Host
                 conn.on('data', (data) => {
                     if(data.type === 'state') {
                         this.roomData = data.state;
@@ -99,6 +124,7 @@ const webrtc = {
                 });
             });
 
+            // Receive Audio Call from Host
             this.peer.on('call', (call) => {
                 call.answer();
                 call.on('stream', (remoteStream) => {
@@ -109,7 +135,7 @@ const webrtc = {
         } catch(e) {
             btn.textContent = "Join";
             btn.disabled = false;
-            alert("Connection Error. Please try again.");
+            alert("Network Error. Please try again.");
         }
     },
 
@@ -120,9 +146,9 @@ const webrtc = {
             conn.on('data', (data) => {
                 if(data.type === 'join') {
                     this.roomData.audience.push(data.user);
-                    conn.userDevice = data.user.deviceId; // Track for kicking
-                    this.broadcastState(); // Update everyone
-                    if(this.myStream) this.peer.call(conn.peer, this.myStream);
+                    conn.userDevice = data.user.deviceId; // Target for kick/mute
+                    this.broadcastState(); // Update UI for everyone
+                    if(this.myStream) this.peer.call(conn.peer, this.myStream); // Send host voice
                 }
                 if(data.type === 'chat') {
                     this.broadcastChat(data.text, data.username);
@@ -289,7 +315,10 @@ const webrtc = {
 
     leaveRoom() {
         this.disableMic();
-        if(this.peer) this.peer.destroy();
+        if(this.peer) {
+            this.peer.destroy();
+            this.peer = null;
+        }
         document.getElementById('audio-container').innerHTML = '';
         this.connections = [];
     }
