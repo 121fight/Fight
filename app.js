@@ -52,15 +52,13 @@ const app = {
         document.getElementById('btn-create-room').addEventListener('click', () => {
             const name = document.getElementById('create-room-name').value;
             if(!name) return alert("Enter room name");
-            closeModals();
-            webrtc.createRoom(name);
+            webrtc.createRoom(name); // Modal closing is now handled in webrtc.js
         });
 
         document.getElementById('btn-join-room').addEventListener('click', () => {
             const code = document.getElementById('join-room-code').value;
             if(code.length !== 4) return alert("Enter 4 digit code");
-            closeModals();
-            webrtc.joinRoom(code);
+            webrtc.joinRoom(code); // Modal closing & Loading text handled in webrtc.js
         });
 
         document.getElementById('btn-leave-room').addEventListener('click', () => {
@@ -73,20 +71,16 @@ const app = {
         document.getElementById('btn-send-chat').addEventListener('click', this.sendChat.bind(this));
         document.getElementById('btn-toggle-mic').addEventListener('click', () => webrtc.toggleMic());
 
-        // --- NEW REPORT SUBMISSION LOGIC ---
         document.getElementById('btn-submit-report').addEventListener('click', () => {
             const reason = document.getElementById('report-reason').value;
             
-            // Format for Telegram
             const reportText = `🚨 *NEW REPORT* 🚨\n\n👤 *Offender Name:* ${this.reportTarget.username}\n🆔 *Offender Device ID:* ${this.reportTarget.deviceId}\n\n📝 *Reason:* ${reason}\n🛡️ *Reporter ID:* ${this.user.deviceId}`;
             
-            // Copy to clipboard
             navigator.clipboard.writeText(reportText).then(() => {
                 alert("Report details COPIED! \n\nPlease PASTE it in the Telegram Bot.");
                 window.open(`https://t.me/Nightworrormic_bot`, '_blank');
                 document.getElementById('modal-report').classList.add('hidden');
             }).catch(err => {
-                // Fallback if clipboard fails
                 window.open(`https://t.me/Nightworrormic_bot?text=${encodeURIComponent(reportText)}`, '_blank');
             });
         });
@@ -200,7 +194,6 @@ const app = {
                     container.appendChild(this.createBtn("Kick to Audience", "danger-btn", () => webrtc.hostCommand('kick_seat', occupant.deviceId, index)));
                     container.appendChild(this.createBtn("Remove from Room", "danger-btn", () => webrtc.hostCommand('kick_room', occupant.deviceId)));
                 } else {
-                    // Send to Report Screen
                     container.appendChild(this.createBtn("Report User", "danger-btn", () => this.openReportModal(occupant.username, occupant.deviceId)));
                 }
             }
@@ -247,7 +240,6 @@ const app = {
         return btn;
     },
 
-    // OPEN REPORT MODAL & SET TARGET DATA
     openReportModal(username, deviceId) {
         this.reportTarget.username = username;
         this.reportTarget.deviceId = deviceId;
