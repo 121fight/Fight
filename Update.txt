@@ -1,0 +1,7 @@
+{
+  "app_status": "on",
+  "force_update": false,
+  "update_message": "New update available Please Update App",
+  "update_link": "https://example.com",
+  "banned_users": []
+}
